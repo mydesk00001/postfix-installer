@@ -34,7 +34,7 @@ sudo postmap /etc/postfix/sasl_passwd
 # Turn off the outgoing Received header
 sudo postconf -e "disable_vrfy_command = yes"
 sudo postconf -e "smtpd_discard_ehlo_keyword_address_maps = hash:/etc/postfix/discard"
-echo "received" | sudo tee -a /etc/postfix/discard
+echo "received discard_it" | sudo tee -a /etc/postfix/discard
 sudo postmap /etc/postfix/discard
 
 # Restart Postfix to apply the changes
