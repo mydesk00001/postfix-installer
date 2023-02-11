@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Update the package list
-sudo apt-get update
+sudo apt-get update -y
 
 # Install Postfix and OpenSSL
-sudo apt-get install postfix openssl
+sudo apt-get install postfix openssl -y
 
 # Prompt the user for the email address, password, and hostname
 read -p "Enter your email address: " email
