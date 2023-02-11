@@ -1,41 +1,68 @@
 #!/bin/bash
 
-# Update the package list
-sudo apt-get update
+# Install prerequisites
+apt update
+apt install -y curl build-essential
 
-# Install Postfix and OpenSSL
-sudo apt-get install postfix openssl
+# Install latest version of Node.js
+curl -fsSL https://deb.nodesource.com/setup_16.x | bash -
+apt-get install -y nodejs
 
-# Prompt the user for the email address, password, and hostname
-read -p "Enter your email address: " email
-read -sp "Enter your email password: " password
-echo
-read -p "Enter the hostname for your server: " hostname
+# Install Haraka
+npm -g config set user root
+npm install -g Haraka
+haraka -i /root/haraka
 
-# Generate a self-signed SSL certificate
-sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/postfix.key -out /etc/ssl/certs/postfix.crt -subj "/CN=$hostname"
+# Configure SMTP settings
+sed -i 's/#listen=0.0.0.0:25/listen=0.0.0.0:587/' /root/haraka/config/smtp.ini
 
-# Configure Postfix to use the SSL certificate
-sudo postconf -e "smtpd_tls_cert_file = /etc/ssl/certs/postfix.crt"
-sudo postconf -e "smtpd_tls_key_file = /etc/ssl/private/postfix.key"
-sudo postconf -e "smtp_tls_cert_file = /etc/ssl/certs/postfix.crt"
-sudo postconf -e "smtp_tls_key_file = /etc/ssl/private/postfix.key"
-sudo postconf -e "smtpd_use_tls = yes"
-sudo postconf -e "smtp_use_tls = yes"
+# Enable TLS and authentication
+sed -i '/^#tls/,/^$/ s/^#//' /root/haraka/config/plugins
+sed -i '/^#auth/,/^$/ s/^#//' /root/haraka/config/plugins
 
-# Configure Postfix to use the provided email address and password
-sudo postconf -e "relayhost = [$email]:587"
-sudo postconf -e "smtp_sasl_auth_enable = yes"
-sudo postconf -e "smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd"
-sudo postconf -e "smtp_sasl_security_options = noanonymous"
-echo "[$email]:587 $email:$password" | sudo tee -a /etc/postfix/sasl_passwd
-sudo postmap /etc/postfix/sasl_passwd
+# Generate self-signed SSL certificate
+haraka -h tls
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /root/haraka/config/tls_key.pem -out /root/haraka/config/tls_cert.pem
 
-# Turn off the outgoing Received header
-sudo postconf -e "disable_vrfy_command = yes"
-sudo postconf -e "smtpd_discard_ehlo_keyword_address_maps = hash:/etc/postfix/discard"
-echo "received discard: discard_it" | sudo tee -a /etc/postfix/discard
-sudo postmap /etc/postfix/discard
+# Configure SSL settings
+cat <<EOT >> /root/haraka/config/tls.ini
+key=/root/haraka/config/tls_key.pem
+cert=/root/haraka/config/tls_cert.pem
+EOT
 
-# Restart Postfix to apply the changes
-sudo service postfix restart
+# Create an authentication user
+echo "username1:$(openssl passwd -crypt passwordgoeshere)" >> /root/haraka/config/auth_flat_file.ini
+
+# Update the sending hostname
+read -p "Enter the sending hostname: " hostname
+sed -i "s/localhost/$hostname/" /root/haraka/config/smtp.ini
+
+# Turn off outgoing received header
+echo "received=false" >> /root/haraka/config/smtp.ini
+
+# Change permissions
+chmod -R 770 /root/haraka
+
+# Create systemd service for Haraka
+cat <<EOT >> /etc/systemd/system/haraka.service
+[Unit]
+Description=Haraka MTA
+After=syslog.target network.target remote-fs.target nss-lookup.target
+
+[Service]
+Type=simple
+PIDFile=/var/run/haraka.pid
+ExecStart=/usr/bin/haraka -c /root/haraka
+KillMode=process
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOT
+
+# Enable and start Haraka service
+systemctl daemon-reload
+systemctl enable haraka
+systemctl start haraka
+
+echo "Haraka installation complete!"
