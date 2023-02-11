@@ -10,7 +10,7 @@ sudo apt-get install openssl -y
 # Prompt for hostname, mail user, and password
 read -p "Enter hostname: " hostname
 read -p "Enter mail user: " mailuser
-read -p "Enter password: " -s password
+read -p "Enter password: " password
 
 # Generate SSL certificate using OpenSSL
 sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/$hostname.key -out /etc/ssl/certs/$hostname.crt \
